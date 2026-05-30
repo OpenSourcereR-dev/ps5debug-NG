@@ -172,6 +172,17 @@ static int install_kernel_patch(void)
     klog_printf("port_outer: kpatch read byte[1]=0x%02x (will OR with 3)\n",
                 scratch[1]);
 
+    /* Already set — jailbreak patched it, skip write */
+    if ((scratch[1] & 3) == 3) {
+        klog_puts("port_outer: kpatch already set by jailbreak\n");
+        return 0;
+    }
+    /* High bits set = likely kernel text, not a flags byte — skip write to avoid KP */
+    if (scratch[1] & 0xFC) {
+        klog_puts("port_outer: kpatch SKIP - byte[1] looks like code, not flags\n");
+        return -1;
+    }
+	
     scratch[1] |= 3;
 
     if (kernel_copyin(scratch, patch_addr, 16) < 0) {
@@ -212,6 +223,7 @@ int main(int argc, char *argv[])
         payload_exit(1);
         return 1;
     }
+	
     klog_printf("port_outer: SceShellCore pid = %d\n", pid);
 
     if (install_kernel_patch() == 0) {

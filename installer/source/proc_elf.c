@@ -33,7 +33,30 @@ static int pt_io(int pid, void *target_addr, uint64_t data) {
     return (int)ptrace_elev(0xC , pid, &buf[1], 0);
 }
 
+/* Try syscall 573 cmd=0x13 (write) first — works on FW 7.00+ where PT_IO is
+ * restricted. Falls back to PT_IO for older firmware where 573 may not work. */
+static int proc_mem_write_573(int pid, void *src, void *dst_va, uint64_t len)
+{
+    unsigned long ucred = kernel_get_proc_ucred(getpid());
+    if (!ucred) return -1;
+    unsigned long saved = 0;
+    kernel_copyout(ucred + 0x58, &saved, 8);
+    uint64_t priv = 0x4800000000000006ULL;
+    kernel_copyin(&priv, ucred + 0x58, 8);
+    uint64_t cmd[2]  = { 1, 0x13ULL };
+    uint64_t args[4] = { (uint64_t)(int32_t)pid, (uint64_t)dst_va,
+                         (uint64_t)src, len };
+    uint64_t out[2]  = { 0, 0 };
+    __crt_syscall(573, cmd, args, out);
+    kernel_copyin(&saved, ucred + 0x58, 8);
+    return (out[1] == len) ? 0 : -1;
+}
+
 int ptrace_io_write_d(int pid, void *src_local, void *dst_target, uint64_t len) {
+    /* Try 573 write first (FW 7.00+ PT_IO restriction workaround) */
+    if (proc_mem_write_573(pid, src_local, dst_target, len) == 0)
+        return 0;
+    /* Fallback to PT_IO for older FW */
     uint64_t buf[5];
     *(uint32_t *)&buf[1] = 2;
     buf[2] = (uint64_t)dst_target;
@@ -256,23 +279,23 @@ static void compute_fw_vmmap_adjustments(uint64_t *out_nentries_adj,
                                           uint64_t *out_name_adj) {
     uint32_t fw = kernel_get_fw_version();
     int write_adj = 0;
-    switch (fw & 0xffff0000u) {
-    case 0x6000000u: case 0x6020000u: case 0x6500000u:                  /* 6.00 6.02 6.50 */
-    case 0x7000000u: case 0x7010000u:                                   /* 7.00 7.01 */
-    case 0x8000000u: case 0x8200000u: case 0x8400000u: 
-	case 0x8600000u:                                                    /* 8.00 8.20 8.40 8.60 */
-    case 0x9000000u: case 0x9050000u: case 0x9200000u:
-    case 0x9400000u: case 0x9600000u:                                   /* 9.00 9.05 9.20 9.40 9.60 */
-    case 0x10000000u: case 0x10010000u: case 0x10200000u:
-    case 0x10400000u: case 0x10600000u:                                 /* 10.00 10.01 10.20 10.40 10.60 */
-    case 0x11000000u: case 0x11200000u: case 0x11400000u:
-    case 0x11600000u:                                                   /* 11.00 11.20 11.40 11.60 */
-    case 0x12000000u: case 0x12020000u: case 0x12200000u:
-    case 0x12400000u: case 0x12600000u: case 0x12700000u:               /* 12.00 12.02 12.20 12.40 12.60 12.70 */
-    case 0x13000000u: case 0x13200000u:                                 /* 13.00 13.20 */
-        write_adj = 1; break;
-    default: write_adj = 0; break;
-    }
+    uint32_t fwm = fw & 0xffff0000u;
+    /* vm_map_entry layout changed in FW 6.x and persists through all later FW */
+    write_adj = (fwm >= 0x6000000u) ? 1 : 0;
+													   
+																							  
+													  
+																									  
+														 
+																										   
+														 
+																									 
+														 
+																												 
+																						 
+							 
+								  
+	 
     *out_nentries_adj = write_adj ? 8    : 0;
     *out_name_adj     = write_adj ? 0xE  : 0;
 }
@@ -706,19 +729,19 @@ int sys_proc_call_remote_func(int pid, void *elf_buf, uint64_t a3_unused,
     uint8_t  saved_caps[16] __attribute__((aligned(16)));
     uint8_t  saved_regs[SPCRF_SIZEOF_REG] __attribute__((aligned(8)));
 
-    if (kernel_get_ucred_caps_fast(pid, saved_caps)) return -1;
+    if (kernel_get_ucred_caps(pid, saved_caps)) return -1;
 
     uint8_t all_ones[16];
     memset(all_ones, 0xFF, 16);
-    if (kernel_set_ucred_caps_fast(pid, all_ones)) return -1;
+    if (kernel_set_ucred_caps(pid, all_ones)) return -1;
 
     if (kern_ptrace_attach_and_wait(pid)) {
-        kernel_set_ucred_caps_fast(pid, saved_caps);
+        kernel_set_ucred_caps(pid, saved_caps);
         return -1;
     }
 
     if (ptrace_elev(0x21 , pid, saved_regs, 0)) {
-        kernel_set_ucred_caps_fast(pid, saved_caps);
+        kernel_set_ucred_caps(pid, saved_caps);
         pt_detach(pid);
         return -1;
     }
@@ -727,14 +750,14 @@ int sys_proc_call_remote_func(int pid, void *elf_buf, uint64_t a3_unused,
                                        (const char *)thread_name);
     if (loaded <= 0) {
 
-        kernel_set_ucred_caps_fast(pid, saved_caps);
+        kernel_set_ucred_caps(pid, saved_caps);
         pt_detach(pid);
         return -1;
     }
     *(uint64_t *)(saved_regs + SPCRF_R_RIP) = (uint64_t)loaded;
     *(uint64_t *)(saved_regs + SPCRF_R_RDI) = proc_call_remote_sce(pid);
 
-    kernel_set_ucred_caps_fast(pid, saved_caps);
+    kernel_set_ucred_caps(pid, saved_caps);
 
     if (*(uint64_t *)(saved_regs + SPCRF_R_RDI) == 0) {
         pt_detach(pid);
