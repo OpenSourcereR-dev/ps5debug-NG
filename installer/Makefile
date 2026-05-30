@@ -1,12 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 
-SDK := ../ps5-payload-sdk/install
-
-ifeq (,$(wildcard $(SDK)/toolchain/prospero.mk))
-    $(error SDK not built - run ../build.sh from the project root)
+ifdef PS5_PAYLOAD_SDK
+    include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
+else
+    $(error PS5_PAYLOAD_SDK is undefined)
 endif
-
-include $(SDK)/toolchain/prospero.mk
 
 ELF       := build/ps5debug-NG.elf
 BUILD_DIR := build
