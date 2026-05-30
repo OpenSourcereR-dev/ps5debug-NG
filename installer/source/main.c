@@ -84,37 +84,78 @@ static int install_kernel_patch(void)
     intptr_t patch_addr;
     const char *fw_label;
     switch (fw) {
-    case 0x3000000u: case 0x3100000u: case 0x3200000u: case 0x3210000u:   /* 3.00 3.10 3.20 3.21 */
+    case 0x3000000u:  case 0x3100000u:  case 0x3200000u:  case 0x3210000u:  /* 3.00  3.10  3.20  3.21 */
         patch_addr = kbase + 0x6466498ULL;
         fw_label = "FW 3.x";
         break;
-    case 0x4020000u:                                                      /* 4.02 */
+
+    case 0x4020000u:                                                        /* 4.02 */
         patch_addr = kbase + 0x6505498ULL;
         fw_label = "FW 4.0";
         break;
-    case 0x4000000u: case 0x4030000u: case 0x4500000u: case 0x4510000u:   /* 4.00 4.03 4.50 4.51 */
+
+    case 0x4000000u:  case 0x4030000u:  case 0x4500000u:  case 0x4510000u:  /* 4.00  4.03  4.50  4.51 */
         patch_addr = kbase + 0x6506498ULL;
         fw_label = "FW 4.x (incl. 4.51)";
         break;
-    case 0x5000000u: case 0x5020000u: case 0x5100000u: case 0x5500000u:   /* 5.00 5.02 5.10 5.50 */
+
+    case 0x5000000u:  case 0x5020000u:  case 0x5100000u:  case 0x5500000u:  /* 5.00  5.02  5.10  5.50 */
         patch_addr = kbase + 0x6646710ULL;
         fw_label = "FW 5.x";
         break;
-    case 0x6000000u: case 0x6020000u: case 0x6500000u:                    /* 6.00 6.02 6.50 */
+
+    case 0x6000000u:  case 0x6020000u:  case 0x6500000u:                    /* 6.00  6.02  6.50 */
         patch_addr = kbase + 0x6596910ULL;
         fw_label = "FW 6.x";
         break;
-    case 0x7000000u: case 0x7010000u:                                     /* 7.00 7.01 */
+
+    case 0x7000000u:  case 0x7010000u:                                      /* 7.00  7.01 */
         patch_addr = kbase + 0xAC8088ULL;
         fw_label = "FW 7.x";
         break;
-    case 0x7200000u: case 0x7400000u: case 0x7600000u: case 0x7610000u:   /* 7.20 7.40 7.60 7.61 */
+
+    case 0x7200000u:  case 0x7400000u:  case 0x7600000u:  case 0x7610000u:  /* 7.20  7.40  7.60  7.61 */
         patch_addr = kbase + 0xAC8088ULL;
         fw_label = "FW 7.5x";
         break;
-    case 0x8000000u: case 0x8200000u: case 0x8400000u: case 0x8600000u:   /* 8.00 8.20 8.40 8.60 */
+
+    case 0x8000000u:  case 0x8200000u:  case 0x8400000u:  case 0x8600000u:  /* 8.00  8.20  8.40  8.60 */
         patch_addr = kbase + 0xAC3088ULL;
         fw_label = "FW 8.x";
+        break;
+
+    case 0x9000000u:                                                        /* 9.00 */
+        patch_addr = kbase + 0xD72088ULL;
+        fw_label = "FW 9.00";
+        break;
+
+    case 0x9050000u:  case 0x9200000u:
+    case 0x9400000u:  case 0x9600000u:                                      /* 9.05  9.20  9.40  9.60 */
+        patch_addr = kbase + 0xD73088ULL;
+        fw_label = "FW 9.x";
+        break;
+
+    case 0x10000000u: case 0x10010000u: case 0x10200000u:
+    case 0x10400000u: case 0x10600000u:                                     /* 10.00 10.01 10.20 10.40 10.60 */
+        patch_addr = kbase + 0xD79088ULL;
+        fw_label = "FW 10.x";
+        break;
+
+    case 0x11000000u: case 0x11200000u:
+    case 0x11400000u: case 0x11600000u:                                     /* 11.00 11.20 11.40 11.60 */
+        patch_addr = kbase + 0xD8C088ULL;
+        fw_label = "FW 11.x";
+        break;
+
+    case 0x12000000u: case 0x12020000u: case 0x12200000u:
+    case 0x12400000u: case 0x12600000u: case 0x12700000u:                   /* 12.00 12.02 12.20 12.40 12.60 12.70 */
+        patch_addr = kbase + 0xD83088ULL;
+        fw_label = "FW 12.x";
+        break;
+
+    case 0x13000000u: case 0x13200000u:                                     /* 13.00 13.20 */
+        patch_addr = kbase + 0xD99088ULL;
+        fw_label = "FW 13.x";
         break;
     default:
         klog_printf("port_outer: kpatch SKIP - unsupported FW magic 0x%x\n", fw);
