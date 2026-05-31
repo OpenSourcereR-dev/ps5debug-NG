@@ -177,11 +177,7 @@ static int install_kernel_patch(void)
         klog_puts("port_outer: kpatch already set by jailbreak\n");
         return 0;
     }
-    /* High bits set = likely kernel text, not a flags byte — skip write to avoid KP */
-    if (scratch[1] & 0xFC) {
-        klog_puts("port_outer: kpatch SKIP - byte[1] looks like code, not flags\n");
-        return -1;
-    }
+
 	
     scratch[1] |= 3;
 
