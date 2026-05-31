@@ -109,14 +109,10 @@ static int install_kernel_patch(void)
         fw_label = "FW 6.x";
         break;
 
-    case 0x7000000u:  case 0x7010000u:                                      /* 7.00  7.01 */
+    case 0x7000000u:  case 0x7010000u: case 0x7200000u:  case 0x7400000u:
+    case 0x7600000u:  case 0x7610000u:                                      /* 7.00  7.01 7.20  7.40  7.60  7.61*/
         patch_addr = kbase + 0xAC8088ULL;
         fw_label = "FW 7.x";
-        break;
-
-    case 0x7200000u:  case 0x7400000u:  case 0x7600000u:  case 0x7610000u:  /* 7.20  7.40  7.60  7.61 */
-        patch_addr = kbase + 0xAC8088ULL;
-        fw_label = "FW 7.5x";
         break;
 
     case 0x8000000u:  case 0x8200000u:  case 0x8400000u:  case 0x8600000u:  /* 8.00  8.20  8.40  8.60 */

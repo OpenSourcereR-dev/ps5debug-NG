@@ -28,7 +28,8 @@
                                                                 0x59Cu)
 
 #define PROC_PATH_OFFSET \
-    (((kernel_get_fw_version() & 0xffff0000u) >= 0x10000000u) ? 0x5FCu : \
+    (((kernel_get_fw_version() & 0xffff0000u) >= 0x12000000u) ? 0x604u : \
+     ((kernel_get_fw_version() & 0xffff0000u) >= 0x10000000u) ? 0x5FCu : \
      ((kernel_get_fw_version() & 0xffff0000u) >= 0x7000000u)  ? 0x5F4u : \
      ((kernel_get_fw_version() & 0xffff0000u) >= 0x6000000u)  ? 0x5E4u : \
                                                                 0x5BCu)
