@@ -7,9 +7,22 @@
 #include <stdarg.h>
 
 #define PROC_NEXT_OFFSET           0x00
-#define PROC_TITLE_ID_OFFSET       0x470
-#define PROC_CONTENT_ID_OFFSET     0x4C4
-#define PROC_SELFINFO_NAME_OFFSET  0x59C
+#define PROC_TITLE_ID_OFFSET \
+    (((kernel_get_fw_version() & 0xffff0000u) >= 0x7000000u) ? 0x49Au : \
+     ((kernel_get_fw_version() & 0xffff0000u) >= 0x6000000u) ? 0x498u : \
+                                                               0x470u)
+
+#define PROC_CONTENT_ID_OFFSET \
+    (((kernel_get_fw_version() & 0xffff0000u) >= 0x7000000u) ? 0x4FCu : \
+     ((kernel_get_fw_version() & 0xffff0000u) >= 0x6000000u) ? 0x4ECu : \
+                                                               0x4C4u)
+
+#define PROC_SELFINFO_NAME_OFFSET \
+    (((kernel_get_fw_version() & 0xffff0000u) >= 0x12000000u) ? 0x5E4u : \
+     ((kernel_get_fw_version() & 0xffff0000u) >= 0x10000000u) ? 0x5DCu : \
+     ((kernel_get_fw_version() & 0xffff0000u) >= 0x7000000u)  ? 0x5D4u : \
+     ((kernel_get_fw_version() & 0xffff0000u) >= 0x6000000u)  ? 0x5C4u : \
+                                                                0x59Cu)
 #define PROC_SELFINFO_NAME_SIZE    32
 
 struct cmd_console_notify_packet {
