@@ -26,6 +26,7 @@ along with this program; see the file COPYING. If not, see
  * Dependencies to standard libraries.
  **/
 static char* (*strcpy)(char*, const char*) = 0;
+static char* (*strncpy)(char*, const char*, unsigned long) = 0;
 static int (*strcmp)(const char*, const char*) = 0;
 static int (*strncmp)(const char*, const char*, unsigned long) = 0;
 
@@ -451,6 +452,9 @@ __rtld_sprx_init(void) {
   }
 
   if(!KERNEL_DLSYM(libc, strcpy)) {
+    return -1;
+  }
+  if(!KERNEL_DLSYM(libc, strncpy)) {
     return -1;
   }
   if(!KERNEL_DLSYM(libc, strcmp)) {
