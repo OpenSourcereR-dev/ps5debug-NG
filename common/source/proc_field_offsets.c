@@ -21,10 +21,13 @@ int proc_get_field_offsets(struct proc_field_offsets *out)
                  fw >= 0x7000000u  ? 0x5F4u :
                  fw >= 0x6000000u  ? 0x5E4u : 0x5BCu;
 
-        c.titleid = fw >= 0x7000000u ? 0x49Au :
+        c.titleid = fw >= 0x8000000u ? 0x470u :
+                    fw >= 0x7000000u ? 0x49Au :
                     fw >= 0x6000000u ? 0x498u : 0x470u;
 
-        c.contentid = fw >= 0x7000000u ? 0x4FCu :
+        c.contentid = fw >= 0x12000000u ? 0x504u :
+                      fw >= 0x8000000u ? 0x4F4u :
+                      fw >= 0x7000000u ? 0x4FCu :
                       fw >= 0x6000000u ? 0x4ECu : 0x4C4u;
 
         c.known = 1;

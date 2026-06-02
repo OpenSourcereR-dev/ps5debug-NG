@@ -450,6 +450,8 @@ int sys_proc_alloc(uint32_t pid, void **out_addr_ptr, uint64_t length)
         *out_addr_ptr = result;
         uint64_t a = (uint64_t)result - 1;
         if (a > 0xfffffffffffffffdull) return -1;
+
+        memset(result, 0, (size_t)length);
         return 0;
     }
 
@@ -461,6 +463,8 @@ int sys_proc_alloc(uint32_t pid, void **out_addr_ptr, uint64_t length)
 
     if ((intptr_t)result != -1L) {
         kernel_mprotect((pid_t)pid, (intptr_t)result, (size_t)length, 7);
+
+        proc_call_remote_sys((int)pid, 203, (long)(intptr_t)result, (long)length);
     }
 
     if (proc_detach_or_stop((int)pid) != 0) return -1;

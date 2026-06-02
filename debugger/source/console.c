@@ -7,6 +7,9 @@
 #include "proc_field_offsets.h"
 #include <stdarg.h>
 
+extern int find_titleid(const uint8_t *buf, size_t len, char *out);
+extern int find_contentid(const uint8_t *buf, size_t len, char *out, size_t out_size);
+
 #define PROC_NEXT_OFFSET           0x00
 #define PROC_SELFINFO_NAME_SIZE    32
 
@@ -237,12 +240,18 @@ int console_foreground_app_handle(int fd, struct cmd_packet *packet) {
 
     resp.pid = (uint32_t)found_pid;
     memcpy(resp.name, p + off.name, PROC_SELFINFO_NAME_SIZE);
-    memcpy(resp.titleid,   p + off.titleid,   sizeof(resp.titleid));
-    memcpy(resp.contentid, p + off.contentid, sizeof(resp.contentid));
+
+    if (find_contentid(p + 0x440, 0x200, resp.contentid, sizeof(resp.contentid)) != 0) {
+        memcpy(resp.contentid, p + off.contentid, sizeof(resp.contentid));
+    }
 
     char titleid_z[17];
-    memcpy(titleid_z, resp.titleid, 16);
-    titleid_z[16] = '\0';
+    memset(titleid_z, 0, sizeof(titleid_z));
+    if (find_titleid(p + 0x440, 0x200, titleid_z) != 0) {
+        memcpy(titleid_z, p + off.titleid, 16);
+        titleid_z[16] = '\0';
+    }
+    memcpy(resp.titleid, titleid_z, sizeof(resp.titleid));
 
     char meta_dir[96];
     snprintf(meta_dir, sizeof(meta_dir), "/system_data/priv/appmeta/%s", titleid_z);
@@ -374,6 +383,9 @@ void *klog_server_thread(void *arg)
             continue;
         }
         if (connfd == 0) continue;
+
+        int32_t nosig = 1;
+        sceNetSetsockopt(connfd, 0xFFFF, 0x0800, &nosig, 4);
 
         int klog_fd = open("/dev/klog", 0, 0);
 

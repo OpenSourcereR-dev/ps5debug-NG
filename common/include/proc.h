@@ -109,6 +109,9 @@ int proc_ptwalk_augment(uint32_t pid,
 
 int proc_ptwalk_read(uint32_t pid, uint64_t va, uint64_t len, void *dst);
 
+int proc_ptwalk_write(uint32_t pid, uint64_t va, uint64_t len, const void *src);
+
 int proc_aux_range_contains(uint32_t pid, uint64_t addr, uint64_t len);
 
 void proc_read_mem(uint32_t pid, uint64_t addr, uint64_t len, void *buf);
+void proc_write_mem(uint32_t pid, uint64_t addr, uint64_t len, const void *buf);

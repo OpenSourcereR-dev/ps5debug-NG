@@ -20,31 +20,31 @@ recognises the following firmware families. Booting on an unsupported FW prints
 `port_outer: kpatch SKIP - unsupported FW magic 0x...` to the kernel log and
 aborts cleanly.
 
-| Family             | Label in code              | Status                                     |
-|--------------------|----------------------------|--------------------------------------------|
-| 3.xx               | `FW 3.x`                   |                                            |
-| 4.xx               | `FW 4.x`                   |                                            |
-| 5.xx               | `FW 5.x`                   |                                            |
-| 6.xx               | `FW 6.x`                   |                                            |
-| 7.xx (incl. 7.5x)  | `FW 7.x`                   |                                            |
-| 8.xx               | `FW 8.x`                   | Initial support added - testing required   |
-| 9.xx               | `FW 9.x`                   | Initial support added - testing required   |
-| 10.xx              | `FW 10.x`                  | Initial support added - testing required   |
-| 11.xx              | `FW 11.x`                  | Initial support added - testing required   |
-| 12.xx              | `FW 12.x`                  | Initial support added - testing required   |
-| 13.xx              | `FW 13.x`                  | Initial support added - testing required   |
+| Family | Point releases recognised                       | Status                                    |
+|--------|-------------------------------------------------|-------------------------------------------|
+| 3.xx   | 3.00, 3.10, 3.20, 3.21                          | Initial support added - testing required  |
+| 4.xx   | 4.00, 4.02, 4.03, 4.50, 4.51                    | Fully Verified                            |
+| 5.xx   | 5.00, 5.02, 5.10, 5.50                          | Initial support added - testing required  |
+| 6.xx   | 6.00, 6.02, 6.50                                | Fully Verified                            |
+| 7.xx   | 7.00, 7.01, 7.01.01, 7.20, 7.40, 7.60, 7.61     | Initial support added - testing required  |
+| 8.xx   | 8.00, 8.20, 8.40, 8.60                          | Fully Verified                            |
+| 9.xx   | 9.00, 9.05, 9.20, 9.40, 9.60                    | Fully Verified                            |
+| 10.xx  | 10.00, 10.01, 10.20, 10.40, 10.60               | Fully Verified                            |
+| 11.xx  | 11.00, 11.20, 11.40, 11.60                      | Initial support added - testing required  |
+| 12.xx  | 12.00, 12.02, 12.20, 12.40, 12.60, 12.70        | Fully Verified                            |
+| 13.xx  | 13.00, 13.20                                    | Initial support added - testing required  |
 
-Each family covers several point releases - see the switch in
-[installer/source/main.c](installer/source/main.c) for the exact set of FW
-magic values recognised per family. Clients can read the running FW with
-`CMD_FW_VERSION` (returns the kernel's raw FW magic word).
+The point releases above are the exact FW magic values recognised by the switch
+in [installer/source/main.c](installer/source/main.c); that file is the source
+of truth. Clients can read the running FW with `CMD_FW_VERSION`, which returns
+the firmware as a decimal `uint16_t` (e.g. `900` for 9.00, `1240` for 12.40).
 
 ---
 
 ## Primary Features
 
 ### Process inspection and manipulation
-- **Enumerate processes** (`p_comm` + pid list).
+- **Enumerate processes** (process name + pid list).
 - **Read and write target memory** in streamed chunks.
 - **List virtual memory maps** - ranges, protections, backing names.
 - **Query process metadata** - name, path, titleId, contentId.
@@ -61,10 +61,11 @@ magic values recognised per family. Clients can read the running FW with
 - **Allocate / free / hint-allocate** memory inside any target process.
 
 ### In-target code execution
-- **Install an RPC stub** (`CMD_PROC_INSTALL`) - injects a reusable trampoline
-  with its own thread into the target.
 - **Call arbitrary functions** with up to six SysV ABI register arguments and
-  read back `rax` (`CMD_PROC_CALL`).
+  read back `rax` (`CMD_PROC_CALL`) - serviced kernel-side via `sys_proc_cmd`.
+- **Install an RPC stub** (`CMD_PROC_INTALL`, opcode `0xBDAA0005`; note the
+  source spelling). In the current build this handler is a stub that returns a
+  `0` handle and performs no injection.
 - **Load ELFs** into a target process - either jump to the entry point
   immediately (`CMD_PROC_ELF`) or return the entry for later invocation
   (`CMD_PROC_ELF_RPC`).
@@ -91,10 +92,10 @@ Large memory regions never leave the PS5. Three server-side decoder commands
 keep bandwidth low:
 - `CMD_PROC_DISASM_REGION` - packed 32-byte-per-instruction stream with
   control-flow, memory-operand, and RIP-relative metadata.
-- `CMD_PROC_EXTRACT_CODE_XREFS` - all resolved RIP-relative branch/call
-  targets in a region, deduplicated.
-- `CMD_PROC_FIND_XREFS_TO` - only instructions that reference a specific
-  target address.
+- `CMD_PROC_EXTRACT_CODE_XREFS` - all resolved RIP-relative operand targets in
+  a region, streamed (not deduplicated server-side).
+- `CMD_PROC_FIND_XREFS_TO` - only instructions whose RIP-relative target equals
+  a specific address.
 
 ### Built-in Keystone assembler (x86-64)
 A cross-compiled LLVM-MC Keystone (x86-only, no exceptions / no RTTI, static
@@ -113,12 +114,16 @@ itself.
 - **Value scan** (`CMD_PROC_SCAN`) - single-pass, 12 value types × 13 compare
   modes (exact, fuzzy, bigger/smaller, between, increased, decreased, changed,
   etc.).
-- **Iterative scan session** (`SCAN_START` → `SCAN_COUNT` → `SCAN_GET`) - lets
-  clients narrow a result set server-side over many passes.
-- **AOB scan** (`CMD_PROC_SCAN_AOB`) - byte patterns with `??` wildcards.
+- **Iterative scan** (`SCAN_START` → `SCAN_COUNT` → `SCAN_GET`) - narrows a
+  result set over many passes. The client holds the candidate list and streams
+  it back each pass; the server re-reads memory and re-compares.
+- **AOB scan** (`CMD_PROC_SCAN_AOB`) - byte patterns with a per-byte wildcard
+  mask.
 - **Multi-pattern AOB scan** (`CMD_PROC_SCAN_AOB_MULTI`) - many patterns in
   one pass.
-- **Auth-gated** - scan commands require a prior `CMD_PROC_AUTH` handshake.
+- **Auth-gated** - only the iterative scan trio (`SCAN_START` / `SCAN_COUNT` /
+  `SCAN_GET`) requires a prior `CMD_PROC_AUTH` handshake; the value scan and the
+  AOB scans do not.
 
 ### System UI integration
 - **Push notifications** to the user's screen with arbitrary UTF-8 text.
@@ -210,14 +215,18 @@ struct cmd_packet {
 };
 ```
 
-Followed by the command's fixed request struct (if any), any trailing
-variable-length payload, and a `uint32_t` status code reply.
+Followed by the command's fixed request struct (if any) and any trailing
+variable-length payload. The reply shape is per-command: most replies begin
+with a `uint32_t` status word (some commands send two, and the info/version
+commands send their data with no status word at all) - see
+[PROTOCOL.md](PROTOCOL.md) for the exact sequence of each.
 
 **Note on status words.** The status `uint32_t` on PS5 is transmitted with
 its bit pairs swapped (`net_send_int32` swaps even/odd-bit positions). Clients
-must un-bitswap incoming status values before comparing to `CMD_SUCCESS` /
-`CMD_ERROR` / `CMD_DATA_NULL` / `CMD_ALREADY_DEBUG`. Subsequent payload bytes
-are sent raw.
+must account for the swap - either un-bitswap the incoming word and compare to
+the server-side constants (`CMD_SUCCESS = 0x40000000`, etc., as the example
+below does), or compare the raw word against the pre-swapped values
+(`CMD_SUCCESS = 0x80000000`, etc.). Subsequent payload bytes are sent raw.
 
 **Full protocol specification:** [PROTOCOL.md](PROTOCOL.md) - every command,
 every packet struct, every enum, every status code, with `file:line`
@@ -272,11 +281,15 @@ elfldr from etaHEN-class loaders).
 You should see a system notification confirming the payload is alive:
 
 ```
-ps5debug-NG by OSR v1.2.3 loaded!
+ps5debug-NG by OSR v1.2.6 loaded!
+Firmware: 9.00
 Coded by OpenSourcereR
 Special thanks to
-golden, Ctn & SiSTRo! ♥
+golden, Ctn,  SiSTRo, EchoStretch, 
+Sonic-Iso & Pharaoh2k!  ❤
 ```
+
+(`Firmware:` shows the running console's firmware, e.g. `9.00` or `12.40`.)
 
 ---
 
@@ -370,6 +383,7 @@ mv /tmp/sdk-<TAG_WITHOUT_v> ps5-payload-sdk
   `-DNDEBUG`). Third-party, unmodified; MIT-licensed.
 - **Keystone** - LLVM-MC-based assembler; cross-compiled here for the PS5
   payload (x86-only, `-fno-exceptions -fno-rtti`, static).
+- **EchoStretch, Sonic-Iso, Pharaoh2k** - contributions and testing.
 - **OSR** (OpenSourcereR) - author.
 
 ---

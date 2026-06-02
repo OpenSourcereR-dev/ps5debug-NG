@@ -21,6 +21,11 @@ bool fw_uses_kernel_dbreg_path(void) {
     case 0x6000000u: case 0x6020000u: case 0x6500000u:                                   /* 6.00 6.02 6.50 */
     case 0x7200000u: case 0x7400000u: case 0x7600000u: case 0x7610000u:                  /* 7.20 7.40 7.60 7.61 (not 7.00/7.01) */
     case 0x8000000u: case 0x8200000u: case 0x8400000u: case 0x8600000u:                  /* 8.00 8.20 8.40 8.60 */
+    case 0x9000000u: case 0x9050000u: case 0x9200000u: case 0x9400000u: case 0x9600000u: /* 9.00 9.05 9.20 9.40 9.60 */
+    case 0x10000000u: case 0x10010000u: case 0x10200000u: case 0x10400000u: case 0x10600000u: /* 10.00 10.01 10.20 10.40 10.60 */
+    case 0x11000000u: case 0x11200000u: case 0x11400000u: case 0x11600000u:                    /* 11.00 11.20 11.40 11.60 */
+    case 0x12000000u: case 0x12020000u: case 0x12200000u: case 0x12400000u: case 0x12600000u: case 0x12700000u: /* 12.00 12.02 12.20 12.40 12.60 12.70 */
+    case 0x13000000u: case 0x13200000u:                                                        /* 13.00 13.20 */
         return true;
     default:
         return false;

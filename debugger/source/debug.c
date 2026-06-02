@@ -379,7 +379,7 @@ void debug_full_teardown(void *svc) {
     while (rbx != bp_end) {
         uint64_t address = *(uint64_t *)(rbx - 8);
         if (address == 0) break;
-        sys_proc_rw_w1((uint64_t)pid, address, 1, rbx, 0);
+        proc_write_mem((uint32_t)pid, address, 1, rbx);
         if (teardown_n_bps < INT3_REWIND_MAX) {
             teardown_bp_addrs[teardown_n_bps++] = address;
         }
@@ -633,7 +633,7 @@ int debug_set_breakpoint_handle(int fd, struct cmd_packet *packet) {
         sys_proc_rw_w0((uint64_t)pid, bp->address, 1, saved_byte_slot, 0);
 
         unsigned char int3 = 0xCC;
-        sys_proc_rw_w1((uint64_t)pid, bp->address, 1, &int3, 0);
+        proc_write_mem((uint32_t)pid, bp->address, 1, &int3);
     } else {
 
         uint32_t was_enabled = *(uint32_t *)(bp_entry + 0x08);
@@ -646,7 +646,7 @@ int debug_set_breakpoint_handle(int fd, struct cmd_packet *packet) {
             int stuck_lw[INT3_REWIND_MAX]; int stuck_n = 0;
             int stuck = int3_scan_stuck(pid, &bp_addr, 1, stuck_lw, INT3_REWIND_MAX, &stuck_n);
 
-            sys_proc_rw_w1((uint64_t)pid, bp_addr, 1, saved_byte_slot, 0);
+            proc_write_mem((uint32_t)pid, bp_addr, 1, saved_byte_slot);
 
             if (stuck > 0) {
                 int3_resume_lwps(pid, stuck_lw, stuck_n);
@@ -1179,7 +1179,6 @@ int dispatch_debug_events(void) {
             for (int _i = 0; _i < 30; _i++) {
                 uint64_t _a = *(uint64_t *)(_pabs_base + _i * 0x18);
                 if (_a != 0 && _a == _pabs_rip) {
-
                     ptrace_raw(PT_CONTINUE, (int)DBGCTX()->pid, (void *)1, 0);
                     DDE_RETURN(0);
                 }
@@ -1263,6 +1262,10 @@ int dispatch_debug_events(void) {
 
         ptrace_raw(PT_CONTINUE, (int)DBGCTX()->pid, (void *)1, 0);
         DDE_RETURN(0);
+    }
+
+    if (*(int32_t *)(lwpi + 0x38) == 2) {
+        pkt_dr[6] = 0;
     }
 
     uint8_t length_buf[176];
@@ -1359,6 +1362,27 @@ int dispatch_debug_events(void) {
         }
     }
 
+    if (matched_bp_v34 == NULL && matched_wp < 0 && *(int32_t *)(lwpi + 0x38) == 2) {
+        uint64_t _dr7 = pkt_dr[7];
+        int _is_data_wp = 0;
+        for (int _i = 0; _i < 4; _i++) {
+            int _en = (int)((_dr7 >> (_i * 2)) & 3);
+            int _rw = (int)((_dr7 >> (16 + _i * 4)) & 3);
+            if (_en && _rw != 0 && pkt_dr[_i] != 0) { _is_data_wp = 1; break; }
+        }
+        if (_is_data_wp) {
+            uint64_t _saved_dr6 = pkt_dr[6];
+            pkt_dr[6] = 0;
+            if (use_kernel) {
+                if (kern_set_dbregs(pid, lwpid, pkt + 0x420) != 0)
+                    ptrace_raw(PT_SETDBREGS, lwpid, pkt + 0x420, 0);
+            } else {
+                ptrace_raw(PT_SETDBREGS, lwpid, pkt + 0x420, 0);
+            }
+            pkt_dr[6] = _saved_dr6;
+        }
+    }
+
     if (matched_bp_v34 != NULL) {
         uint64_t bp_addr        = *(uint64_t *)(matched_bp_v34 + 8);
         char    *saved_byte_ptr =  matched_bp_v34 + 16;
@@ -1367,7 +1391,7 @@ int dispatch_debug_events(void) {
         uint64_t saved_authid_1 = 0;
         int authid_bumped_1 = (authid_bump_safe(&saved_authid_1) == 0);
 
-        sys_proc_rw_w1((uint64_t)pid, bp_addr, 1, saved_byte_ptr, 0);
+        proc_write_mem((uint32_t)pid, bp_addr, 1, saved_byte_ptr);
         *(uint64_t *)(pkt + 0x030 + 0x88) -= 1;
 
         if (use_kernel) {
@@ -1458,7 +1482,7 @@ int dispatch_debug_events(void) {
                 }
             }
         }
-        sys_proc_rw_w1((uint64_t)pid, bp_addr, 1, &int3, 0);
+        proc_write_mem((uint32_t)pid, bp_addr, 1, &int3);
 
         if (authid_bumped_2) authid_restore_safe(saved_authid_2);
     }

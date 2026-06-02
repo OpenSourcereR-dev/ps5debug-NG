@@ -62,6 +62,9 @@ void configure_socket(int fd) {
     setsockopt(fd, 6,      1,      &one, 4);
     one = 1;
     setsockopt(fd, 0xFFFF, 4,      &one, 4);
+    one = 1;
+
+    setsockopt(fd, 0xFFFF, 0x0800, &one, 4);
 }
 
 static int handle_client(struct server_client *svc) {
@@ -268,6 +271,9 @@ static int start_server(void) {
 
         int32_t one_a = 1;
         sceNetSetsockopt(fd, 6, 1, &one_a, 4);
+        one_a = 1;
+
+        sceNetSetsockopt(fd, 0xFFFF, 0x0800, &one_a, 4);
 
         struct server_client *slot = (struct server_client *)alloc_client();
         if (!slot) {
@@ -312,11 +318,21 @@ teardown:
 
 static void debugger_server_loop(void) {
     static const char disconnect_msg[] = "ps5debug-NG disconnected.";
-    static const char loaded_msg[]     = PS5DEBUG_NG_BRAND_STR " loaded!\n"
-                                         "Coded by OpenSourcereR\n"
-                                         "Special thanks to\n"
-                                         "golden, Ctn,  SiSTRo,\n"
-                                         "EchoStretch, Sonic-Iso  \xE2\x9D\xA4\n";
+
+    uint32_t fw       = kernel_get_fw_version();
+    uint16_t fw_high  = (uint16_t)(fw >> 16);
+    unsigned fw_major = ((fw_high >> 12) & 0xF) * 10 + ((fw_high >> 8) & 0xF);
+    unsigned fw_minor = ((fw_high >>  4) & 0xF) * 10 +  (fw_high       & 0xF);
+
+    char loaded_msg[256];
+    snprintf(loaded_msg, sizeof(loaded_msg),
+             PS5DEBUG_NG_BRAND_STR " loaded!\n"
+             "Firmware: %u.%02u\n"
+             "Coded by OpenSourcereR\n"
+             "Special thanks to\n"
+             "golden, Ctn,  SiSTRo, EchoStretch, \n"
+             "Sonic-Iso & Pharaoh2k!  \xE2\x9D\xA4\n",
+             fw_major, fw_minor);
 
     char     ip_buf[16];
     uint32_t retry = 0;

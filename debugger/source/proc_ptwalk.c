@@ -362,6 +362,59 @@ int proc_ptwalk_augment(uint32_t pid,
     return rc;
 }
 
+int proc_ptwalk_write(uint32_t pid, uint64_t va, uint64_t len, const void *src) {
+    if ((int32_t)pid <= 0 || !src || len == 0) return 1;
+    if (ptw_discover() != 1) return 1;
+
+    intptr_t kproc = kernel_get_proc_fast((pid_t)pid);
+    if (!kproc) return 1;
+
+    uint64_t vmspace = 0;
+    if (kernel_copyout_fast((intptr_t)(kproc + PTW_PROC_VMSPACE_OFF),
+                            &vmspace, 8) != 0 || !vmspace)
+        return 1;
+
+    uint64_t pair[2];
+    if (kernel_copyout_fast((intptr_t)(vmspace + g_ptw_pmap_off),
+                            pair, sizeof(pair)) != 0)
+        return 1;
+
+    uint64_t cr3 = pair[1];
+    if (cr3 == 0 || (cr3 & 0xFFF) || cr3 >= PTW_PHYS_BOUND) return 1;
+    if (pair[0] - cr3 != g_ptw_dmap) return 1;
+
+    const uint8_t *in   = (const uint8_t *)src;
+    uint64_t       done = 0;
+    while (done < len) {
+        uint64_t cur_va = va + done;
+        uint64_t e   = 0;
+        int      lvl = -1;
+        if (ptw_walk_leaf(g_ptw_dmap, cr3, cur_va, &e, &lvl) != 0)
+            return 1;
+
+        uint64_t page_size;
+        if      (lvl == 3) page_size = 0x1000ULL;
+        else if (lvl == 2) page_size = 0x200000ULL;
+        else if (lvl == 1) page_size = 0x40000000ULL;
+        else return 1;
+
+        uint64_t page_mask   = page_size - 1;
+        uint64_t off_in_page = cur_va & page_mask;
+        uint64_t phys        = ((e & PTW_PHYS_MASK) & ~page_mask) + off_in_page;
+
+        uint64_t n = len - done;
+        uint64_t avail = page_size - off_in_page;
+        if (n > avail) n = avail;
+
+        if (phys >= PTW_PHYS_BOUND || phys + n > PTW_PHYS_BOUND) return 1;
+
+        if (kernel_copyin_fast(in + done, (intptr_t)(g_ptw_dmap + phys), n) != 0)
+            return 1;
+        done += n;
+    }
+    return 0;
+}
+
 int proc_ptwalk_read(uint32_t pid, uint64_t va, uint64_t len, void *dst) {
     if ((int32_t)pid <= 0 || !dst || len == 0) return 1;
     if (ptw_discover() != 1) return 1;

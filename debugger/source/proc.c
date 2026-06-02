@@ -13,6 +13,15 @@
 #define PROC_VMSPACE_OFFSET        0x200
 #define PROC_SELFINFO_NAME_SIZE    32
 
+struct sce_app_info {
+    uint32_t app_id;
+    uint64_t unknown1;
+    uint32_t app_type;
+    char     title_id[10];
+    char     unknown2[0x3c];
+};
+extern int sceKernelGetAppInfo(pid_t pid, struct sce_app_info *info);
+
 static void copy_cstr_from_buf(const uint8_t *src, char *out, size_t max) {
     if (max == 0) return;
     size_t i;
@@ -24,6 +33,54 @@ static void copy_cstr_from_buf(const uint8_t *src, char *out, size_t max) {
         }
     }
     out[max - 1] = 0;
+}
+
+int find_titleid(const uint8_t *buf, size_t len, char *out) {
+    if (len < 9) return 1;
+    for (size_t i = 0; i + 9 <= len; i++) {
+        int ok = 1;
+        for (int j = 0; j < 4; j++)
+            if (buf[i + j] < 'A' || buf[i + j] > 'Z') { ok = 0; break; }
+        if (!ok) continue;
+        for (int j = 4; j < 9; j++)
+            if (buf[i + j] < '0' || buf[i + j] > '9') { ok = 0; break; }
+        if (!ok) continue;
+        memcpy(out, buf + i, 9);
+        out[9] = '\0';
+        return 0;
+    }
+    return 1;
+}
+
+int find_contentid(const uint8_t *buf, size_t len, char *out, size_t out_size) {
+    if (out_size == 0) return 1;
+    if (len < 17) return 1;
+    for (size_t i = 0; i + 17 <= len; i++) {
+        const uint8_t *s = buf + i;
+        int ok = 1;
+        for (int j = 0; j < 2; j++)
+            if (s[j] < 'A' || s[j] > 'Z') { ok = 0; break; }
+        if (!ok) continue;
+        for (int j = 2; j < 6; j++)
+            if (s[j] < '0' || s[j] > '9') { ok = 0; break; }
+        if (!ok) continue;
+        if (s[6] != '-') continue;
+        for (int j = 7; j < 11; j++)
+            if (s[j] < 'A' || s[j] > 'Z') { ok = 0; break; }
+        if (!ok) continue;
+        for (int j = 11; j < 16; j++)
+            if (s[j] < '0' || s[j] > '9') { ok = 0; break; }
+        if (!ok) continue;
+        if (s[16] != '_') continue;
+        size_t k = 0;
+        while (i + k < len && s[k] != 0 && k < out_size - 1) {
+            out[k] = (char)s[k];
+            k++;
+        }
+        out[k] = '\0';
+        return 0;
+    }
+    return 1;
 }
 
 #define DISASM_READ_CHUNK 0x10000
@@ -370,6 +427,16 @@ void proc_read_mem(uint32_t pid, uint64_t addr, uint64_t len, void *buf) {
     sys_proc_rw_w0((uint64_t)pid, addr, len, buf, 0);
 }
 
+void proc_write_mem(uint32_t pid, uint64_t addr, uint64_t len, const void *buf) {
+    static int s_fw_ge9 = -1;
+    if (s_fw_ge9 < 0)
+        s_fw_ge9 = ((kernel_get_fw_version() & 0xffff0000u) >= 0x09000000u) ? 1 : 0;
+
+    if (s_fw_ge9 && proc_ptwalk_write(pid, addr, len, buf) == 0)
+        return;
+    sys_proc_rw_w1((uint64_t)pid, addr, len, (void *)buf, 0);
+}
+
 int proc_read_handle(int fd, struct cmd_packet *packet) {
     struct cmd_proc_read_packet *rp = (struct cmd_proc_read_packet *)packet->data;
     if (!rp) {
@@ -513,13 +580,13 @@ int proc_write_handle(int fd, struct cmd_packet *packet) {
 
     while (length > 0x10000) {
         net_recv_all(fd, data, 0x10000, 1);
-        sys_proc_rw_w1((uint64_t)wp->pid, address, 0x10000, data, 0);
+        proc_write_mem(wp->pid, address, 0x10000, data);
         address += 0x10000;
         length  -= 0x10000;
     }
     if (length > 0) {
         net_recv_all(fd, data, (int)length, 1);
-        sys_proc_rw_w1((uint64_t)wp->pid, address, length, data, 0);
+        proc_write_mem(wp->pid, address, length, data);
     }
 
     net_send_int32(fd, CMD_SUCCESS);
@@ -753,8 +820,28 @@ int proc_info_handle(int fd, struct cmd_packet *packet) {
     memcpy(resp.name, p + off.name, PROC_SELFINFO_NAME_SIZE);
 
     copy_cstr_from_buf(p + off.path,      resp.path,      sizeof(resp.path));
-    copy_cstr_from_buf(p + off.titleid,   resp.titleid,   sizeof(resp.titleid));
-    copy_cstr_from_buf(p + off.contentid, resp.contentid, sizeof(resp.contentid));
+
+    uint8_t aibuf[0x80];
+    memset(aibuf, 0, sizeof(aibuf));
+    int ai_rc = sceKernelGetAppInfo((pid_t)ip->pid, (struct sce_app_info *)aibuf);
+
+    char tid[16];
+    memset(tid, 0, sizeof(tid));
+    if (ai_rc == 0 && find_titleid(aibuf, sizeof(aibuf), tid) == 0) {
+
+    } else if (find_titleid(p + 0x440, 0x200, tid) == 0) {
+
+    } else {
+        copy_cstr_from_buf(p + off.titleid, tid, sizeof(tid));
+    }
+    {
+        size_t tcap = sizeof(resp.titleid);
+        memcpy(resp.titleid, tid, tcap < sizeof(tid) ? tcap : sizeof(tid));
+    }
+
+    if (find_contentid(p + 0x440, 0x200, resp.contentid, sizeof(resp.contentid)) != 0) {
+        copy_cstr_from_buf(p + off.contentid, resp.contentid, sizeof(resp.contentid));
+    }
 
     free(proc_buf);
 

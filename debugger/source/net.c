@@ -9,7 +9,8 @@ int net_send_all(int fd, const void *buf, int len) {
     int left = len;
     while (left > 0) {
         int chunk = (left > NET_MAX_LENGTH) ? NET_MAX_LENGTH : left;
-        ssize_t n = send(fd, p, chunk, 0);
+
+        ssize_t n = send(fd, p, chunk, MSG_NOSIGNAL);
         if (n <= 0) return -1;
         p += n;
         left -= (int)n;
